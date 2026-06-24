@@ -1,0 +1,35 @@
+# Default focused views for hws-report.
+# Use with: python hws-report.py data.yaml --view-config default_views.yaml
+#
+# Each view picks the most important metrics for a topic and groups them
+# by metric so the same measurement across all devices appears side by side.
+# Metrics that don't exist in your data are silently ignored.
+
+views:
+  - name: "Clock"
+    include_metrics:
+      - clock.clock_frequency
+      - clock.sm_clock_frequency
+      - clock.memory_clock_frequency
+    group_by: [rank, device]
+    columns: 3
+
+  - name: "Memory"
+    include_metrics:
+      - memory.memory_used
+      - memory.memory_free
+      - general.memory_utilization
+    group_by: [rank, device]
+    columns: 3
+
+  - name: "Energy and Power"
+    include_metrics:
+      - power.power_usage
+      - power.power_total_energy_consumed
+    group_by: [rank, device]
+    columns: 2
+
+  - name: "Temperature"
+    include_metrics:
+      - temperature
+    group_by: [rank, device]

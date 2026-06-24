@@ -1,0 +1,267 @@
+# ============================================================
+# IDEs & Editors
+# ============================================================
+
+# JetBrains (PyCharm, IntelliJ, WebStorm, GoLand, CLion, etc.)
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+.idea_modules/
+
+# Visual Studio Code
+.vscode/
+*.code-workspace
+.history/
+
+# Visual Studio
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.ncb
+*.opendb
+*.VC.db
+*.VC.VC.opendb
+
+# Vim / Neovim
+*.swp
+*.swo
+*.swn
+*~
+.netrwhist
+Session.vim
+.nvim/
+.vim/
+
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+auto-save-list
+tramp
+.\#*
+.dir-locals.el
+
+# Sublime Text
+*.sublime-project
+*.sublime-workspace
+.sublimetext/
+
+# Eclipse
+.classpath
+.project
+.settings/
+.loadpath
+.recommenders/
+
+# NetBeans
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+
+# Xcode
+xcuserdata/
+*.xccheckout
+*.xcscmblueprint
+*.moved-aside
+DerivedData/
+*.hmap
+*.ipa
+*.xcuserstate
+.xcode.env.local
+
+# TextMate
+*.tmproj
+*.tmproject
+tmtags
+
+# Cursor
+.cursor/
+.cursor-tutor/
+
+# Zed
+.zed/
+
+# Helix
+.helix/
+
+# Kate
+*.kate-swp
+
+# ============================================================
+# AI Coding Assistants & Agents
+# ============================================================
+
+# Anthropic Claude (claude.ai, Claude Code, MCP servers)
+.claude/
+.claude_files/
+.mcp.json
+.mcp/
+CLAUDE.local.md
+CLAUDE.md
+
+# OpenCode
+.opencode/
+opencode.json
+
+# GitHub Copilot
+.github/copilot-instructions.md
+.copilot/
+
+# Cursor AI rules (keep .cursorrules if you want to share them,
+# but local overrides belong here)
+.cursorignore
+.cursor/
+
+# Codeium / Windsurf
+.codeium/
+.windsurf/
+.windsurfrules
+
+# Aider
+.aider*
+.aider.tags.cache.v*/
+aider.conf.yml
+
+# Continue
+.continue/
+
+# Tabnine
+.tabnine/
+
+# Amazon Q / CodeWhisperer
+.aws/amazonq/
+.q/
+
+# Devin
+.devin/
+
+# Sweep AI
+sweep.yaml
+
+# ============================================================
+# Secrets & Credentials
+# ============================================================
+
+# Generic secrets
+.env
+.env.*
+!.env.example
+!.env.template
+!.env.sample
+*.pem
+*.key
+*.p12
+*.pfx
+*.crt
+*.cer
+secrets/
+secrets.*
+secret.json
+credentials
+credentials.json
+credentials.yml
+credentials.yaml
+auth.json
+
+# API keys & tokens
+*.token
+api_keys.txt
+api_keys.json
+.api_key
+.apikey
+
+# SSH
+.ssh/
+id_rsa
+id_rsa.pub
+id_ed25519
+id_ed25519.pub
+known_hosts
+
+# Cloud provider credentials
+.aws/
+.gcp/
+.azure/
+gcloud/
+serviceaccount.json
+*-service-account.json
+*-sa-key.json
+google-credentials.json
+azure-credentials.json
+
+# Terraform
+*.tfvars
+*.tfvars.json
+!example.tfvars
+.terraform/
+terraform.tfstate
+terraform.tfstate.backup
+
+# Ansible
+*.vault_pass
+vault_password_file
+
+# ============================================================
+# OS-generated noise
+# ============================================================
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+.DocumentRevisions-V100
+.fseventsd
+.Spotlight-V100
+.TemporaryItems
+.Trashes
+.VolumeIcon.icns
+.com.apple.timemachine.donotpresent
+.AppleDB
+.AppleDesktop
+Network Trash Folder
+Temporary Items
+.apdisk
+
+# Windows
+Thumbs.db
+Thumbs.db:encdata
+ehthumbs.db
+ehthumbs_vista.db
+[Dd]esktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+*.lnk
+
+# Linux
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# ============================================================
+# Python
+# ============================================================
+
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+.pytest_cache/
+
+
+sample_inputs/
