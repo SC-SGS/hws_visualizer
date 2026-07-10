@@ -986,6 +986,61 @@ details[open] > summary.view-group-title::before { transform: rotate(90deg); }
 .src-dot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; margin-right: 5px; flex-shrink: 0; }
 .event-control { margin-top: 0.6rem; padding-top: 0.6rem; border-top: 1px solid #e2e8f0; }
 .event-control .sidebar-heading { margin-bottom: 0.35rem; }
+
+/* ── Energy Dashboard ── */
+.energy-dashboard-container { display: flex; flex-direction: column; gap: 1.5rem; }
+.energy-kpi-row { display: flex; gap: 1rem; flex-wrap: wrap; }
+.tab-spacer { flex: 1; min-width: 0.5rem; pointer-events: none; }
+.energy-kpi-tile {
+  background: #fff; border: 1px solid #e2e8f0; border-radius: 10px;
+  padding: 1rem 1.5rem; flex: 1; min-width: 160px;
+}
+.energy-kpi-tile--tip { cursor: help; position: relative; }
+.energy-kpi-tile--tip::after {
+  content: attr(data-tip);
+  position: absolute;
+  top: calc(100% + 10px); left: 50%; transform: translateX(-50%);
+  background: #1e293b; color: #f8fafc;
+  font-size: 0.7rem; line-height: 1.5; padding: 0.45rem 0.7rem;
+  border-radius: 6px; width: max-content; max-width: 260px;
+  white-space: normal; text-align: left;
+  pointer-events: none; opacity: 0; transition: opacity 0.12s;
+  z-index: 200; box-shadow: 0 4px 14px rgba(0,0,0,0.25);
+}
+.energy-kpi-tile--tip::before {
+  content: '';
+  position: absolute;
+  top: calc(100% + 4px); left: 50%; transform: translateX(-50%);
+  border: 6px solid transparent; border-bottom-color: #1e293b;
+  pointer-events: none; opacity: 0; transition: opacity 0.12s; z-index: 201;
+}
+.energy-kpi-tile--tip:hover::after,
+.energy-kpi-tile--tip:hover::before { opacity: 1; }
+.energy-kpi-value { font-size: 1.8rem; font-weight: 700; color: #0f172a; line-height: 1.1; }
+.energy-kpi-unit { font-size: 0.85rem; color: #64748b; font-weight: 400; }
+.energy-kpi-label {
+  font-size: 0.75rem; color: #94a3b8; margin-top: 0.35rem;
+  text-transform: uppercase; letter-spacing: 0.07em;
+}
+.energy-kpi-source-col {
+  background: #fff; border: 1px solid #e2e8f0; border-radius: 10px;
+  padding: 0.75rem 1rem; flex: 1; min-width: 200px;
+  display: flex; flex-direction: column; gap: 0.5rem;
+}
+.energy-kpi-source-col .energy-kpi-tile {
+  background: #f8fafc; border-color: #f1f5f9; padding: 0.6rem 0.75rem;
+}
+.energy-kpi-source-label {
+  font-size: 0.7rem; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.07em; padding-bottom: 0.4rem; border-bottom: 2px solid;
+  margin-bottom: 0.25rem; display: flex; align-items: center; gap: 0.3rem;
+}
+.energy-section-title { font-size: 0.9rem; font-weight: 600; color: #0f172a; margin-bottom: 0.6rem; }
+.energy-chart-block {
+  background: #fff; border: 1px solid #e2e8f0; border-radius: 10px;
+  padding: 1rem 0.75rem 0.25rem;
+}
+.energy-plot-div { width: 100%; }
 """
 
 _JS_TEMPLATE = """\
@@ -2038,6 +2093,581 @@ _JS_TEMPLATE = """\
     _customPlots.forEach(function(_, i) { _refreshCustomCard(i); });
   }
 
+  // ── Energy Dashboard ─────────────────────────────────────────────────────
+
+  function _fmtEnergy(joules) {
+    if (Math.abs(joules) >= 1e6) return { val: (joules / 1e6).toFixed(2), unit: 'MJ' };
+    if (Math.abs(joules) >= 1000) return { val: (joules / 1000).toFixed(2), unit: 'kJ' };
+    return { val: joules.toFixed(1), unit: 'J' };
+  }
+
+  function _computeEnergyStats(energyPlots, powerPlots) {
+    // Build power lookup: devkey|rank -> array of power plots (keep all, not just last).
+    var pwMap = {};
+    powerPlots.forEach(function(p) {
+      var key = p.devkey + '|' + p.rank;
+      if (!pwMap[key]) pwMap[key] = [];
+      pwMap[key].push(p);
+    });
+
+    function _powerStats(pwArr, sid) {
+      // Aggregate min/avg/max across all matching power plots for this source.
+      var sumAvg = 0, mn = Infinity, mx = -Infinity, cnt = 0;
+      pwArr.forEach(function(pw) {
+        var pwTi = (COMPARE_MODE && pw.sources) ? pw.sources.indexOf(sid) : 0;
+        if (pwTi < 0) return;
+        var pwTr = pw.data[pwTi] || pw.data[0];
+        if (!pwTr || !pwTr.y || !pwTr.y.length) return;
+        var s = 0;
+        pwTr.y.forEach(function(v) {
+          s += v;
+          if (v < mn) mn = v;
+          if (v > mx) mx = v;
+        });
+        sumAvg += s / pwTr.y.length;
+        cnt++;
+      });
+      if (!cnt) return { avgPower: null, minPower: null, maxPower: null };
+      return { avgPower: sumAvg / cnt, minPower: mn, maxPower: mx };
+    }
+
+    var stats = [];
+    var energySeen = {};  // track which devkey|rank|sid combos came from energyPlots
+    energyPlots.forEach(function(p) {
+      var pwArr = pwMap[p.devkey + '|' + p.rank] || [];
+      var srcList = (COMPARE_MODE && p.sources) ? p.sources : ['s0'];
+      srcList.forEach(function(sid, ti) {
+        var tr = p.data[ti] || p.data[0];
+        if (!tr || !tr.y || !tr.y.length) return;
+        var totalEnergy = tr.y[tr.y.length - 1];
+        var pw = _powerStats(pwArr, sid);
+        energySeen[p.devkey + '|' + p.rank + '|' + sid] = true;
+        stats.push({ devkey: p.devkey, device: p.device, rank: p.rank, sourceId: sid,
+                     totalEnergy: totalEnergy,
+                     avgPower: pw.avgPower, minPower: pw.minPower, maxPower: pw.maxPower });
+      });
+    });
+
+    // Also include devices that have power_usage but no energy counter, so they
+    // appear in the power chart even without energy data.
+    powerPlots.forEach(function(p) {
+      var srcList = (COMPARE_MODE && p.sources) ? p.sources : ['s0'];
+      srcList.forEach(function(sid) {
+        if (energySeen[p.devkey + '|' + p.rank + '|' + sid]) return;
+        energySeen[p.devkey + '|' + p.rank + '|' + sid] = true;
+        var pwArr = pwMap[p.devkey + '|' + p.rank] || [];
+        var pw = _powerStats(pwArr, sid);
+        if (pw.avgPower == null) return;
+        stats.push({ devkey: p.devkey, device: p.device, rank: p.rank, sourceId: sid,
+                     totalEnergy: null,
+                     avgPower: pw.avgPower, minPower: pw.minPower, maxPower: pw.maxPower });
+      });
+    });
+
+    return stats;
+  }
+
+  // Build per-source aggregate KPI values; returns { totalJ, peakW, peakDevice, peakRank, totalAvgW }
+  function _energyColStats(sStats) {
+    var totalJ = sStats.reduce(function(a, s) { return a + (s.totalEnergy || 0); }, 0);
+    var peakEntry = null;
+    sStats.forEach(function(s) {
+      if (s.maxPower != null && (peakEntry === null || s.maxPower > peakEntry.maxPower))
+        peakEntry = s;
+    });
+    var ap = sStats.filter(function(s) { return s.avgPower != null; });
+    var totalAvgW = ap.length ? ap.reduce(function(a, s) { return a + s.avgPower; }, 0) : null;
+    return {
+      totalJ: totalJ,
+      peakW: peakEntry ? peakEntry.maxPower : null,
+      peakDevice: peakEntry ? peakEntry.device : null,
+      peakRank: peakEntry ? peakEntry.rank : null,
+      totalAvgW: totalAvgW,
+    };
+  }
+
+  function _buildEnergyKpiRow(stats) {
+    var row = document.createElement('div');
+    row.className = 'energy-kpi-row';
+
+    // tooltip = shown on hover via CSS data-tip; adds cursor:help + ⓘ indicator
+    function makeTile(val, unit, label, tooltip) {
+      var tile = document.createElement('div');
+      tile.className = 'energy-kpi-tile' + (tooltip ? ' energy-kpi-tile--tip' : '');
+      if (tooltip) tile.setAttribute('data-tip', tooltip);
+      var vEl = document.createElement('div');
+      vEl.className = 'energy-kpi-value';
+      vEl.innerHTML = val + '<span class="energy-kpi-unit"> ' + unit + '</span>';
+      tile.appendChild(vEl);
+      var lEl = document.createElement('div');
+      lEl.className = 'energy-kpi-label';
+      lEl.textContent = label + (tooltip ? ' ⓘ' : '');
+      tile.appendChild(lEl);
+      return tile;
+    }
+
+    function peakTooltip(c) {
+      if (!c.peakDevice) return null;
+      var loc = (c.peakRank !== null && c.peakRank !== 'none')
+        ? c.peakDevice + '  (rank ' + c.peakRank + ')'
+        : c.peakDevice;
+      return 'Highest instantaneous power sample. Observed on: ' + loc;
+    }
+
+    var avgPowerTip = 'Sum of per-device average power. Approximates total system draw during the run.';
+
+
+    if (COMPARE_MODE && SOURCES.length > 1) {
+      var bySource = {};
+      stats.forEach(function(s) {
+        if (!bySource[s.sourceId]) bySource[s.sourceId] = [];
+        bySource[s.sourceId].push(s);
+      });
+      SOURCES.forEach(function(src) {
+        var sStats = bySource[src.id];
+        if (!sStats || !sStats.length) return;
+        var col = document.createElement('div');
+        col.className = 'energy-kpi-source-col';
+        var srcLbl = document.createElement('div');
+        srcLbl.className = 'energy-kpi-source-label';
+        srcLbl.style.borderColor = src.color;
+        srcLbl.style.color = src.color;
+        var dot = document.createElement('span');
+        dot.className = 'src-dot';
+        dot.style.background = src.color;
+        srcLbl.appendChild(dot);
+        srcLbl.appendChild(document.createTextNode(src.label));
+        col.appendChild(srcLbl);
+        var c = _energyColStats(sStats);
+        var fmt = _fmtEnergy(c.totalJ);
+        col.appendChild(makeTile(fmt.val, fmt.unit, 'Total Energy'));
+        if (c.peakW != null)
+          col.appendChild(makeTile(c.peakW.toFixed(1), 'W', 'Peak Power', peakTooltip(c)));
+        if (c.totalAvgW != null)
+          col.appendChild(makeTile(c.totalAvgW.toFixed(1), 'W', 'Avg System Power', avgPowerTip));
+        row.appendChild(col);
+      });
+    } else {
+      var c = _energyColStats(stats);
+      var fmt = _fmtEnergy(c.totalJ);
+      row.appendChild(makeTile(fmt.val, fmt.unit, 'Total Energy (all devices)'));
+      if (c.peakW != null)
+        row.appendChild(makeTile(c.peakW.toFixed(1), 'W', 'Peak Power Observed', peakTooltip(c)));
+      if (c.totalAvgW != null)
+        row.appendChild(makeTile(c.totalAvgW.toFixed(1), 'W', 'Avg System Power', avgPowerTip));
+    }
+    return row;
+  }
+
+  // Sort devices by rank (numerically) then device name; build rank-band shapes for MPI grouping.
+  function _energyDevOrder(stats) {
+    var devOrder = [], devSeen = {};
+    stats.forEach(function(s) {
+      if (!devSeen[s.devkey]) {
+        devSeen[s.devkey] = true;
+        devOrder.push({ devkey: s.devkey, device: s.device, rank: s.rank });
+      }
+    });
+    devOrder.sort(function(a, b) {
+      if (a.rank === 'none' && b.rank === 'none') return a.device.localeCompare(b.device);
+      if (a.rank === 'none') return -1;
+      if (b.rank === 'none') return 1;
+      var dr = parseInt(a.rank, 10) - parseInt(b.rank, 10);
+      return dr !== 0 ? dr : a.device.localeCompare(b.device);
+    });
+    return devOrder;
+  }
+
+  // Returns { shapes, annotations } for alternating rank-group background bands.
+  function _rankBandLayout(devOrder, hasMpi) {
+    if (!hasMpi) return { shapes: [], annotations: [] };
+    var groups = [], cur = null;
+    devOrder.forEach(function(d, i) {
+      if (d.rank !== (cur && cur.rank)) {
+        cur = { rank: d.rank, start: i, end: i };
+        groups.push(cur);
+      } else { cur.end = i; }
+    });
+    var bandFills = ['rgba(200,215,245,0.55)', 'rgba(235,240,255,0.2)'];
+    var shapes = groups.map(function(g, gi) {
+      return {
+        type: 'rect', layer: 'below',
+        xref: 'paper', x0: 0, x1: 1,
+        yref: 'y',
+        y0: g.start - 0.5, y1: g.end + 0.5,
+        fillcolor: bandFills[gi % 2],
+        line: { width: 0 },
+      };
+    });
+    var annotations = groups.filter(function(g) { return g.rank !== 'none'; }).map(function(g) {
+      return {
+        xref: 'paper', x: 1.01,
+        yref: 'y', y: (g.start + g.end) / 2,
+        text: '<b>Rank ' + g.rank + '</b>',
+        showarrow: false,
+        font: { size: 10, color: '#374151' },
+        xanchor: 'left', yanchor: 'middle',
+      };
+    });
+    return { shapes: shapes, annotations: annotations };
+  }
+
+  function _renderEnergyBarChart(el, stats, mode) {
+    var hasMpi = stats.some(function(s) { return s.rank !== 'none'; });
+    var devOrder = _energyDevOrder(stats);
+    function devLabel(d) {
+      return (hasMpi && d.rank !== 'none') ? d.device + ' (rank ' + d.rank + ')' : d.device;
+    }
+    var yLabels = devOrder.map(devLabel);
+    var leftMargin = Math.min(300, Math.max(140,
+      yLabels.reduce(function(m, l) { return Math.max(m, l.length * 7); }, 0)));
+    var chartH = Math.max(260, 48 * devOrder.length + 100);
+    var bands = _rankBandLayout(devOrder, hasMpi);
+
+    var srcList = (COMPARE_MODE && SOURCES.length > 1)
+      ? SOURCES.filter(function(src) { return stats.some(function(s) { return s.sourceId === src.id; }); })
+      : [{ id: 's0', label: null, color: '#6081ff' }];
+
+    // In single-file MPI mode: colour each bar by its rank using the blue scale.
+    var blueScale = ['#6081ff', '#3a5fd0', '#1e42a8', '#8099ff', '#9fb8ff',
+                     '#c0d0ff', '#4a6fdf', '#2a4fb8', '#7090f0', '#aac0ff'];
+    var rankBarColors = null;
+    if (hasMpi && !(COMPARE_MODE && SOURCES.length > 1)) {
+      var _rankIdx = {}, _ri = 0;
+      devOrder.forEach(function(d) {
+        if (_rankIdx[d.rank] === undefined) _rankIdx[d.rank] = _ri++;
+      });
+      rankBarColors = devOrder.map(function(d) {
+        return blueScale[_rankIdx[d.rank] % blueScale.length];
+      });
+    }
+
+    var traces = [];
+    var layout = {
+      margin: { l: leftMargin, r: hasMpi ? 68 : 20, t: 40, b: 50 },
+      height: chartH,
+      hovermode: 'closest',
+      barmode: 'group',
+      showlegend: COMPARE_MODE && SOURCES.length > 1,
+      legend: { orientation: 'h', y: -0.15, x: 0, xanchor: 'left', font: { size: 11 } },
+      shapes: bands.shapes,
+      annotations: bands.annotations,
+      yaxis: {
+        automargin: true,
+        autorange: 'reversed',
+        categoryorder: 'array',
+        categoryarray: yLabels,
+      },
+    };
+
+    if (mode === 'energy') {
+      // Aggregate energy across all matching stats (handles multiple docs per device).
+      function energyFor(d, srcId) {
+        var matching = stats.filter(function(st) {
+          return st.devkey === d.devkey && st.sourceId === srcId && st.totalEnergy != null;
+        });
+        if (!matching.length) return null;
+        return matching.reduce(function(a, st) { return a + st.totalEnergy; }, 0);
+      }
+      var allJ = [];
+      srcList.forEach(function(src) {
+        devOrder.forEach(function(d) {
+          var e = energyFor(d, src.id);
+          if (e != null) allJ.push(e);
+        });
+      });
+      var maxJ = allJ.length ? Math.max.apply(null, allJ) : 0;
+      var scale = maxJ >= 1e6 ? 1e6 : maxJ >= 1000 ? 1000 : 1;
+      var unit  = maxJ >= 1e6 ? 'MJ' : maxJ >= 1000 ? 'kJ' : 'J';
+      layout.xaxis = { title: 'Energy [' + unit + ']', zeroline: true };
+      srcList.forEach(function(src) {
+        // Pre-compute rank totals for "X / Y total rank" tooltip.
+        var rankTotalsJ = {};
+        devOrder.forEach(function(d) {
+          var e = energyFor(d, src.id);
+          if (e != null) rankTotalsJ[d.rank] = (rankTotalsJ[d.rank] || 0) + e;
+        });
+
+        // Split bars into two traces: devices with energy data and power-only devices.
+        var xVals = [], xNoData = [], custData = [], custNoData = [];
+        devOrder.forEach(function(d) {
+          var e = energyFor(d, src.id);
+          if (e != null) {
+            var fmt = _fmtEnergy(e);
+            var fmtRank = _fmtEnergy(rankTotalsJ[d.rank] || 0);
+            xVals.push(e / scale);
+            xNoData.push(null);
+            custData.push(fmt.val + ' ' + fmt.unit + ' / ' + fmtRank.val + ' ' + fmtRank.unit + ' (rank total)');
+            custNoData.push(null);
+          } else {
+            xVals.push(null);
+            xNoData.push(0);
+            custData.push(null);
+            custNoData.push('no energy counter');
+          }
+        });
+        var namePart = src.label ? src.label + ': ' : '';
+        traces.push({
+          type: 'bar', orientation: 'h',
+          name: src.label || 'Energy',
+          x: xVals, y: yLabels,
+          marker: { color: rankBarColors || src.color },
+          hovertemplate: '<b>%{y}</b><br>' + namePart + '%{customdata}<extra></extra>',
+          customdata: custData,
+        });
+        // Stub trace for power-only devices (gray, dotted outline).
+        var hasNoData = xNoData.some(function(v) { return v !== null; });
+        if (hasNoData) {
+          traces.push({
+            type: 'bar', orientation: 'h',
+            name: 'no energy data',
+            showlegend: false,
+            x: xNoData, y: yLabels,
+            width: 0.6,
+            marker: { color: '#f1f5f9', line: { color: '#94a3b8', width: 1.5 } },
+            hovertemplate: '<b>%{y}</b><br>no energy counter available<extra></extra>',
+            customdata: custNoData,
+          });
+        }
+      });
+
+    } else {
+      // Power mode — avg bar + error_x whiskers showing [min, max] range, same in single & compare.
+      // Aggregate across all matching stats (handles multiple docs per device).
+      function powerFor(d, srcId) {
+        var matching = stats.filter(function(st) {
+          return st.devkey === d.devkey && st.sourceId === srcId && st.avgPower != null;
+        });
+        if (!matching.length) return null;
+        var sumAvg = 0, mn = Infinity, mx = -Infinity;
+        matching.forEach(function(st) {
+          sumAvg += st.avgPower;
+          if (st.minPower != null && st.minPower < mn) mn = st.minPower;
+          if (st.maxPower != null && st.maxPower > mx) mx = st.maxPower;
+        });
+        return { avg: sumAvg / matching.length,
+                 min: isFinite(mn) ? mn : sumAvg / matching.length,
+                 max: isFinite(mx) ? mx : sumAvg / matching.length };
+      }
+      layout.xaxis = { title: 'Power [W]', zeroline: true };
+      srcList.forEach(function(src) {
+        var xAvg     = [], errPlus = [], errMinus = [], custData = [];
+        devOrder.forEach(function(d) {
+          var pw = powerFor(d, src.id);
+          var avg = pw ? pw.avg : 0;
+          var mn  = pw ? pw.min : avg;
+          var mx  = pw ? pw.max : avg;
+          xAvg.push(avg);
+          errMinus.push(avg - mn);
+          errPlus.push(mx - avg);
+          if (!pw) { custData.push('n/a'); return; }
+          custData.push('avg ' + avg.toFixed(1) + ' | min ' + mn.toFixed(1) + ' | max ' + mx.toFixed(1) + ' W');
+        });
+        traces.push({
+          type: 'bar', orientation: 'h',
+          name: src.label || 'Avg Power',
+          x: xAvg, y: yLabels,
+          marker: { color: rankBarColors || src.color },
+          error_x: {
+            type: 'data', symmetric: false,
+            array: errPlus, arrayminus: errMinus,
+            visible: true, color: '#1e293b',
+            thickness: 1.5, width: 5,
+          },
+          hovertemplate: '<b>%{y}</b><br>' + (src.label ? src.label + ': ' : '') + '%{customdata}<extra></extra>',
+          customdata: custData,
+        });
+      });
+      layout.showlegend = COMPARE_MODE && SOURCES.length > 1;
+    }
+
+    Plotly.newPlot(el, traces, layout, {
+      responsive: true, displayModeBar: true,
+      modeBarButtonsToRemove: ['select2d', 'lasso2d', 'autoScale2d', 'toImage'],
+      modeBarButtonsToAdd: [], displaylogo: false,
+    });
+  }
+
+  function _renderRankChart(el, stats) {
+    var ranks = [], rankSeen = {};
+    stats.forEach(function(s) {
+      if (!rankSeen[s.rank]) { rankSeen[s.rank] = true; ranks.push(s.rank); }
+    });
+    ranks.sort(function(a, b) {
+      if (a === 'none') return -1; if (b === 'none') return 1;
+      return parseInt(a, 10) - parseInt(b, 10);
+    });
+    var rankLabels = ranks.map(function(r) { return r === 'none' ? 'All' : 'Rank ' + r; });
+
+    // Scale on max rank total (stack height) so the unit fits the tallest bar
+    var srcIds = (COMPARE_MODE && SOURCES.length > 1)
+      ? SOURCES.map(function(s) { return s.id; }) : ['s0'];
+    var allTotals = [];
+    ranks.forEach(function(r) {
+      srcIds.forEach(function(sid) {
+        allTotals.push(stats.filter(function(s) { return s.rank === r && s.sourceId === sid; })
+                            .reduce(function(a, s) { return a + (s.totalEnergy || 0); }, 0));
+      });
+    });
+    var maxTot = allTotals.length ? Math.max.apply(null, allTotals) : 0;
+    var scale = maxTot >= 1e6 ? 1e6 : maxTot >= 1000 ? 1000 : 1;
+    var unit  = maxTot >= 1e6 ? 'MJ' : maxTot >= 1000 ? 'kJ' : 'J';
+
+    var traces = [];
+    var barmode = 'stack';
+
+    if (COMPARE_MODE && SOURCES.length > 1) {
+      // Compare mode: one grouped bar per source (total energy all devices per rank)
+      barmode = 'group';
+      var srcList = SOURCES.filter(function(src) {
+        return stats.some(function(s) { return s.sourceId === src.id; });
+      });
+      srcList.forEach(function(src) {
+        var yVals = ranks.map(function(r) {
+          return stats.filter(function(s) { return s.rank === r && s.sourceId === src.id; })
+                      .reduce(function(a, s) { return a + (s.totalEnergy || 0); }, 0) / scale;
+        });
+        var custData = yVals.map(function(v) {
+          var fmt = _fmtEnergy(v * scale); return fmt.val + ' ' + fmt.unit;
+        });
+        traces.push({
+          type: 'bar', name: src.label || 'Energy',
+          x: rankLabels, y: yVals,
+          marker: { color: src.color },
+          hovertemplate: '<b>%{x}</b><br>' + src.label + ': %{customdata}<extra></extra>',
+          customdata: custData,
+        });
+      });
+    } else {
+      // Single mode: stacked bars by device name.
+      // Use raw device names (no serial normalization) so each physical device
+      // appears as its own coloured stack — avoids merging GPUs that share the
+      // same base name but differ only in their hardware bus-ID suffix length.
+      var devTypes = [], devTypeSeen = {};
+      stats.forEach(function(s) {
+        if (!devTypeSeen[s.device]) { devTypeSeen[s.device] = true; devTypes.push(s.device); }
+      });
+      devTypes.sort();
+
+      // Pre-compute per-rank totals for the "X / Y (rank total)" tooltip.
+      var rankTotalsJ = {};
+      ranks.forEach(function(r) {
+        rankTotalsJ[r] = stats.filter(function(st) {
+          return st.rank === r && st.sourceId === 's0' && st.totalEnergy != null;
+        }).reduce(function(a, st) { return a + st.totalEnergy; }, 0);
+      });
+
+      // Blue-scale palette derived from HWS brand blue (#6081ff)
+      var devColors = ['#6081ff', '#3a5fd0', '#1e42a8', '#8099ff', '#9fb8ff',
+                       '#c0d0ff', '#4a6fdf', '#2a4fb8', '#7090f0', '#aac0ff'];
+
+      devTypes.forEach(function(dev, di) {
+        var yVals = ranks.map(function(r) {
+          var total = stats.filter(function(st) {
+            return st.rank === r && st.device === dev &&
+                   st.sourceId === 's0' && st.totalEnergy != null;
+          }).reduce(function(a, st) { return a + st.totalEnergy; }, 0);
+          return total / scale;
+        });
+        var custData = ranks.map(function(r) {
+          var total = stats.filter(function(st) {
+            return st.rank === r && st.device === dev &&
+                   st.sourceId === 's0' && st.totalEnergy != null;
+          }).reduce(function(a, st) { return a + st.totalEnergy; }, 0);
+          if (total === 0) return 'n/a';
+          var fmt = _fmtEnergy(total);
+          var fmtRank = _fmtEnergy(rankTotalsJ[r] || 0);
+          return fmt.val + ' ' + fmt.unit + ' / ' + fmtRank.val + ' ' + fmtRank.unit + ' (rank total)';
+        });
+        traces.push({
+          type: 'bar', name: dev,
+          x: rankLabels, y: yVals,
+          marker: { color: devColors[di % devColors.length] },
+          hovertemplate: '<b>%{x}</b> — ' + dev + ': %{customdata}<extra></extra>',
+          customdata: custData,
+        });
+      });
+    }
+
+    // Annotations: rank-total label on top of each stacked bar (single mode only).
+    var stackAnnotations = [];
+    if (!(COMPARE_MODE && SOURCES.length > 1)) {
+      ranks.forEach(function(r, ri) {
+        var total = (typeof rankTotalsJ !== 'undefined' && rankTotalsJ[r]) || 0;
+        if (!total) return;
+        var fmt = _fmtEnergy(total);
+        stackAnnotations.push({
+          x: rankLabels[ri],
+          y: total / scale,
+          text: fmt.val + ' ' + fmt.unit,
+          xanchor: 'center', yanchor: 'bottom',
+          showarrow: false,
+          font: { size: 11, color: '#1e293b', weight: 600 },
+          yshift: 4,
+        });
+      });
+    }
+
+    Plotly.newPlot(el, traces, {
+      margin: { l: 60, r: 20, t: 40, b: 60 },
+      height: Math.max(300, 55 * ranks.length + 120),
+      yaxis: { title: 'Energy [' + unit + ']' },
+      xaxis: {},
+      hovermode: 'closest',
+      barmode: barmode,
+      showlegend: true,
+      annotations: stackAnnotations,
+      legend: { orientation: 'h', y: -0.25, x: 0, xanchor: 'left', font: { size: 11 } },
+    }, {
+      responsive: true, displayModeBar: true,
+      modeBarButtonsToRemove: ['select2d', 'lasso2d', 'autoScale2d', 'toImage'],
+      modeBarButtonsToAdd: [], displaylogo: false,
+    });
+  }
+
+  function _buildEnergyDashboard() {
+    document.querySelectorAll('.sampler-section').forEach(function(s) { s.style.display = 'none'; });
+    var container = document.createElement('div');
+    container.className = 'energy-dashboard-container';
+    var mainEl = document.querySelector('.main');
+    var tabBar  = document.getElementById('view-tabs');
+    var refNode = tabBar ? tabBar.nextSibling : document.querySelector('.report-header').nextSibling;
+    mainEl.insertBefore(container, refNode);
+
+    var energyPlots = PLOTS.filter(function(p) {
+      return p.group === 'power' && p.metric === 'power_total_energy_consumed';
+    });
+    var powerPlots = PLOTS.filter(function(p) {
+      return p.group === 'power' && p.metric === 'power_usage';
+    });
+    var stats = _computeEnergyStats(energyPlots, powerPlots);
+
+    container.appendChild(_buildEnergyKpiRow(stats));
+
+    function chartBlock(title) {
+      var block = document.createElement('div');
+      block.className = 'energy-chart-block';
+      var ttl = document.createElement('div');
+      ttl.className = 'energy-section-title';
+      ttl.textContent = title;
+      block.appendChild(ttl);
+      var plotEl = document.createElement('div');
+      plotEl.className = 'energy-plot-div';
+      block.appendChild(plotEl);
+      container.appendChild(block);
+      return plotEl;
+    }
+
+    var hasMpi = stats.some(function(s) { return s.rank !== 'none'; });
+    var rankEl  = hasMpi ? chartBlock('Total Energy by Rank  (stacked by device)') : null;
+    var energyEl = chartBlock('Total Energy by Device');
+    var powerEl  = chartBlock('Power Draw by Device  (avg ± min/max W)');
+
+    if (rankEl) _renderRankChart(rankEl, stats);
+    _renderEnergyBarChart(energyEl, stats, 'energy');
+    _renderEnergyBarChart(powerEl,  stats, 'power');
+  }
+
   function _isGroupedMode(v) {
     var levels = Array.isArray(v.group_by) ? v.group_by : [v.group_by || 'device'];
     return !(levels.length === 1 && levels[0] === 'device');
@@ -2049,12 +2679,23 @@ _JS_TEMPLATE = """\
     _activeViewIdx = idx;
     var prevCustom = document.querySelector('.custom-view-container');
     if (prevCustom) prevCustom.remove();
+    var prevEnergy = document.querySelector('.energy-dashboard-container');
+    if (prevEnergy) {
+      prevEnergy.querySelectorAll('.energy-plot-div').forEach(function(el) {
+        if (el._fullLayout) Plotly.purge(el);
+      });
+      prevEnergy.remove();
+    }
     _restoreToDevice();
     document.querySelectorAll('.view-tab').forEach(function(btn, i) {
       btn.classList.toggle('active', i === idx);
     });
     if (v.custom) {
       _buildCustomView();
+      return;
+    }
+    if (v.energy) {
+      _buildEnergyDashboard();
       return;
     }
     if (_isGroupedMode(v)) {
@@ -2335,6 +2976,10 @@ _JS_TEMPLATE = """\
         });
       }
       document.getElementById('no-results').classList.toggle('visible', !anyVisible);
+      return;
+    }
+    if (v && v.energy) {
+      document.getElementById('no-results').classList.toggle('visible', false);
       return;
     }
     if (v && _isGroupedMode(v)) {
@@ -3174,9 +3819,15 @@ def build_html(
         final_views = ([] if has_user_all else _DEFAULT_VIEWS) + views
     else:
         final_views = _DEFAULT_VIEWS
+    has_energy = any(p["group"] == "power" and p["metric"] == "power_total_energy_consumed"
+                     for p in plots_js)
+    if has_energy:
+        final_views = final_views + [{"name": "Energy Dashboard", "energy": True,
+                                       "include_metrics": "all", "group_by": ["device"],
+                                       "columns": None, "utility": True}]
     final_views = final_views + [{"name": "Custom Plots", "custom": True,
                                    "include_metrics": "all", "group_by": ["device"],
-                                   "columns": None}]
+                                   "columns": None, "utility": True}]
     show_view_tabs = len(final_views) > 1
     views_json_str = json.dumps(final_views)
 
@@ -3194,13 +3845,16 @@ def build_html(
         .replace("__PLOTS_JSON__", plots_json_str)
     )
 
+    def _tab_btn(i: int, v: dict) -> str:
+        spacer = ('<span class="tab-spacer"></span>'
+                  if v.get("utility") and (i == 0 or not final_views[i - 1].get("utility"))
+                  else "")
+        active = " active" if i == 0 else ""
+        return f'{spacer}<button class="view-tab{active}" data-view-idx="{i}">{_esc(v["name"])}</button>'
+
     view_tab_bar = (
         '<div class="view-tabs" id="view-tabs">'
-        + "".join(
-            f'<button class="view-tab{" active" if i == 0 else ""}"'
-            f' data-view-idx="{i}">{_esc(v["name"])}</button>'
-            for i, v in enumerate(final_views)
-        )
+        + "".join(_tab_btn(i, v) for i, v in enumerate(final_views))
         + "</div>\n"
     ) if show_view_tabs else ""
 
