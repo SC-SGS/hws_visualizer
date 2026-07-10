@@ -1119,17 +1119,20 @@ _JS_TEMPLATE = """\
       });
     };
     menu.appendChild(pdfBtn);
-    var sep = document.createElement('hr');
-    menu.appendChild(sep);
-    var dataBtn = document.createElement('button');
-    dataBtn.className = 'dl-item';
-    dataBtn.textContent = 'Data (JSON)';
-    dataBtn.onclick = function(e) {
-      e.stopPropagation();
-      menu.remove();
-      _exportPlotData(gd);
-    };
-    menu.appendChild(dataBtn);
+    var isEnergyPlot = gd.classList && gd.classList.contains('energy-plot-div');
+    if (!isEnergyPlot) {
+      var sep = document.createElement('hr');
+      menu.appendChild(sep);
+      var dataBtn = document.createElement('button');
+      dataBtn.className = 'dl-item';
+      dataBtn.textContent = 'Data (JSON)';
+      dataBtn.onclick = function(e) {
+        e.stopPropagation();
+        menu.remove();
+        _exportPlotData(gd);
+      };
+      menu.appendChild(dataBtn);
+    }
     document.body.appendChild(menu);
     setTimeout(function() {
       function handler(e) {
@@ -1259,6 +1262,12 @@ _JS_TEMPLATE = """\
 
   var _dlBtn = {
     name: 'Download (PNG / SVG / PDF / Data)',
+    icon: _dlIcon,
+    click: _showDlMenu,
+  };
+
+  var _dlBtnNoData = {
+    name: 'Download (PNG / SVG / PDF)',
     icon: _dlIcon,
     click: _showDlMenu,
   };
@@ -2484,7 +2493,7 @@ _JS_TEMPLATE = """\
     Plotly.newPlot(el, traces, layout, {
       responsive: true, displayModeBar: true,
       modeBarButtonsToRemove: ['select2d', 'lasso2d', 'autoScale2d', 'toImage'],
-      modeBarButtonsToAdd: [], displaylogo: false,
+      modeBarButtonsToAdd: [_dlBtnNoData], displaylogo: false,
     });
   }
 
@@ -2621,7 +2630,7 @@ _JS_TEMPLATE = """\
     }, {
       responsive: true, displayModeBar: true,
       modeBarButtonsToRemove: ['select2d', 'lasso2d', 'autoScale2d', 'toImage'],
-      modeBarButtonsToAdd: [], displaylogo: false,
+      modeBarButtonsToAdd: [_dlBtnNoData], displaylogo: false,
     });
   }
 
