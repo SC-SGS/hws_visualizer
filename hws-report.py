@@ -1039,6 +1039,7 @@ details[open] > summary.view-group-title::before { transform: rotate(90deg); }
 .energy-chart-block {
   background: #fff; border: 1px solid #e2e8f0; border-radius: 10px;
   padding: 1rem 0.75rem 0.25rem;
+  overflow: hidden;
 }
 .energy-plot-div { width: 100%; }
 """
@@ -2321,6 +2322,12 @@ _JS_TEMPLATE = """\
     return { shapes: shapes, annotations: annotations };
   }
 
+  // Nudge the modebar left so it doesn't overlap the plot's right edge.
+  function _nudgeModebar(el) {
+    var mb = el.querySelector('.modebar');
+    if (mb) mb.style.right = '20px';
+  }
+
   function _renderEnergyBarChart(el, stats, mode) {
     var hasMpi = stats.some(function(s) { return s.rank !== 'none'; });
     var devOrder = _energyDevOrder(stats);
@@ -2495,6 +2502,7 @@ _JS_TEMPLATE = """\
       modeBarButtonsToRemove: ['select2d', 'lasso2d', 'autoScale2d', 'toImage'],
       modeBarButtonsToAdd: [_dlBtnNoData], displaylogo: false,
     });
+    _nudgeModebar(el);
   }
 
   function _renderRankChart(el, stats) {
@@ -2543,6 +2551,10 @@ _JS_TEMPLATE = """\
           type: 'bar', name: src.label || 'Energy',
           x: rankLabels, y: yVals,
           marker: { color: src.color },
+          text: custData,
+          textposition: 'outside',
+          textfont: { color: src.color, size: 11 },
+          cliponaxis: false,
           hovertemplate: '<b>%{x}</b><br>' + src.label + ': %{customdata}<extra></extra>',
           customdata: custData,
         });
@@ -2632,6 +2644,7 @@ _JS_TEMPLATE = """\
       modeBarButtonsToRemove: ['select2d', 'lasso2d', 'autoScale2d', 'toImage'],
       modeBarButtonsToAdd: [_dlBtnNoData], displaylogo: false,
     });
+    _nudgeModebar(el);
   }
 
   function _buildEnergyDashboard() {
@@ -2668,7 +2681,10 @@ _JS_TEMPLATE = """\
     }
 
     var hasMpi = stats.some(function(s) { return s.rank !== 'none'; });
-    var rankEl  = hasMpi ? chartBlock('Total Energy by Rank  (stacked by device)') : null;
+    var rankTitle = (COMPARE_MODE && SOURCES.length > 1)
+      ? 'Total Energy by Rank'
+      : 'Total Energy by Rank  (stacked by device)';
+    var rankEl  = hasMpi ? chartBlock(rankTitle) : null;
     var energyEl = chartBlock('Total Energy by Device');
     var powerEl  = chartBlock('Power Draw by Device  (avg ± min/max W)');
 
