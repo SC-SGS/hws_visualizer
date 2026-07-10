@@ -442,6 +442,11 @@ body {
   color: #94a3b8;
   margin-bottom: 1rem;
 }
+.sidebar-filters.filters-disabled { opacity: 0.45; pointer-events: none; }
+.sidebar-filters.filters-disabled > .sidebar-heading::after {
+  content: ' — inactive on this tab';
+  font-weight: 400; text-transform: none; letter-spacing: normal; color: #94a3b8;
+}
 .filter-group {
   margin-bottom: 0.5rem;
   border: 1px solid #e2e8f0;
@@ -2702,6 +2707,13 @@ _JS_TEMPLATE = """\
     var v = VIEWS[idx];
     if (!v) return;
     _activeViewIdx = idx;
+    var sidebarFilters = document.querySelector('.sidebar-filters');
+    if (sidebarFilters) {
+      sidebarFilters.classList.toggle('filters-disabled', !!v.energy);
+      sidebarFilters.title = v.energy
+        ? "Filters don't affect the Energy Dashboard — it always aggregates all data."
+        : '';
+    }
     var prevCustom = document.querySelector('.custom-view-container');
     if (prevCustom) prevCustom.remove();
     var prevEnergy = document.querySelector('.energy-dashboard-container');
