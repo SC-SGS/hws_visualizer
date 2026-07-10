@@ -2388,7 +2388,7 @@ _JS_TEMPLATE = """\
       var maxJ = allJ.length ? Math.max.apply(null, allJ) : 0;
       var scale = maxJ >= 1e6 ? 1e6 : maxJ >= 1000 ? 1000 : 1;
       var unit  = maxJ >= 1e6 ? 'MJ' : maxJ >= 1000 ? 'kJ' : 'J';
-      layout.xaxis = { title: 'Energy [' + unit + ']', zeroline: true };
+      layout.xaxis = { title: { text: 'Energy [' + unit + ']' }, zeroline: true };
       srcList.forEach(function(src) {
         // Pre-compute rank totals for "X / Y total rank" tooltip.
         var rankTotalsJ = {};
@@ -2458,7 +2458,7 @@ _JS_TEMPLATE = """\
                  min: isFinite(mn) ? mn : sumAvg / matching.length,
                  max: isFinite(mx) ? mx : sumAvg / matching.length };
       }
-      layout.xaxis = { title: 'Power [W]', zeroline: true };
+      layout.xaxis = { title: { text: 'Power [W]' }, zeroline: true };
       srcList.forEach(function(src) {
         var xAvg     = [], errPlus = [], errMinus = [], custData = [];
         devOrder.forEach(function(d) {
@@ -2620,7 +2620,7 @@ _JS_TEMPLATE = """\
     Plotly.newPlot(el, traces, {
       margin: { l: 60, r: 20, t: 40, b: 60 },
       height: Math.max(300, 55 * ranks.length + 120),
-      yaxis: { title: 'Energy [' + unit + ']' },
+      yaxis: { title: { text: 'Energy [' + unit + ']' } },
       xaxis: {},
       hovermode: 'closest',
       barmode: barmode,
