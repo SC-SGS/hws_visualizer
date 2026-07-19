@@ -10,6 +10,10 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 import yaml
 import plotly.graph_objects as go
 
+# Prefer the C-accelerated loader (libyaml) when available; falls back to the
+# pure-Python SafeLoader transparently otherwise.
+_YAML_LOADER = getattr(yaml, "CSafeLoader", yaml.SafeLoader)
+
 _LOGO_SVG = (
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 152.51483 56.285943">'
     '<g transform="translate(-31.99399,-74.551448)">'
@@ -109,7 +113,7 @@ def parse_args() -> argparse.Namespace:
 
 def load_documents(path: str) -> List[Dict[str, Any]]:
     with open(path, encoding="utf-8") as f:
-        return [d for d in yaml.safe_load_all(f) if isinstance(d, dict)]
+        return [d for d in yaml.load_all(f, Loader=_YAML_LOADER) if isinstance(d, dict)]
 
 
 def iter_samplers(docs: List[Dict[str, Any]]):
@@ -324,7 +328,7 @@ def _normalize_group_by(raw) -> List[str]:
 
 def load_view_config(path: str) -> List[Dict]:
     with open(path, encoding="utf-8") as f:
-        cfg = yaml.safe_load(f)
+        cfg = yaml.load(f, Loader=_YAML_LOADER)
     raw = cfg.get("views", []) if isinstance(cfg, dict) else []
     views = []
     for v in raw:
