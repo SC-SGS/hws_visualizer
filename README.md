@@ -334,6 +334,11 @@ Use this as a starting point for applying your own plot style, computing statist
 
 ---
 
+## AI Use Disclaimer
+
+This project was developed with assistance from [Claude](https://claude.ai) (Anthropic). AI-generated content may contain errors. Please review and test before relying on it.
+
+
 ## License
 
 See [LICENSE](LICENSE).
