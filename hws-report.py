@@ -4,6 +4,7 @@
 import argparse
 import json
 import os
+import sys
 from collections import defaultdict
 from typing import Any, Dict, List, Optional, Set, Tuple
 
@@ -794,7 +795,7 @@ details[open] > summary.view-group-title::before { transform: rotate(90deg); }
 .expand-btn {
   position: absolute;
   top: 0.45rem; right: 0.45rem;
-  opacity: 0;
+  opacity: 1;
   transition: opacity 0.15s;
   background: rgba(255,255,255,0.85);
   border: 1px solid #e2e8f0;
@@ -806,7 +807,6 @@ details[open] > summary.view-group-title::before { transform: rotate(90deg); }
   z-index: 1;
 }
 .expand-btn:hover { background: #fff; color: #0f172a; border-color: #94a3b8; }
-.plot-card:hover .expand-btn { opacity: 1; }
 
 /* ── Modal overlay ── */
 .modal-overlay {
@@ -852,6 +852,10 @@ details[open] > summary.view-group-title::before { transform: rotate(90deg); }
 #modal-close:hover { background: #f1f5f9; color: #0f172a; }
 .modal-body { flex: 1; overflow-y: auto; min-height: 0; }
 #modal-plot { display: block; }
+
+/* ── Touchscreen-demo "feature disabled" popup ── */
+.demo-modal-content { width: auto; max-width: 420px; }
+.demo-modal-body { padding: 1.1rem 1.25rem 1.4rem; font-size: 0.88rem; line-height: 1.5; color: #374151; }
 
 /* ── Custom plot builder ── */
 .custom-view-toolbar { margin-bottom: 1rem; display: flex; align-items: center; gap: 0.6rem; }
@@ -1093,12 +1097,8 @@ _JS_TEMPLATE = """\
       btn.textContent = fmt;
       btn.onclick = function(e) {
         e.stopPropagation();
-        var title = ((gd.layout || {}).title || {}).text || 'plot';
-        Plotly.downloadImage(gd, {
-          format: fmt.toLowerCase(),
-          filename: title.replace(/[—·]/g, '-').replace(/[^\\w\\-]/g, '_').replace(/_+/g, '_'),
-        });
         menu.remove();
+        openDemoModal(_DEMO_MSG);  // touchscreen-demo: downloads disabled
       };
       menu.appendChild(btn);
     });
@@ -1108,25 +1108,7 @@ _JS_TEMPLATE = """\
     pdfBtn.onclick = function(e) {
       e.stopPropagation();
       menu.remove();
-      var w = gd.clientWidth || 800;
-      var h = gd.clientHeight || 400;
-      Plotly.toImage(gd, {format: 'svg', width: w, height: h}).then(function(svg) {
-        var win = window.open('', '_blank');
-        if (!win) { alert('Pop-up blocked — allow pop-ups for this page to export PDF.'); return; }
-        win.document.write(
-          '<html><head><style>' +
-          '@page{size:' + w + 'px ' + h + 'px;margin:0}' +
-          'body{margin:0}img{width:' + w + 'px;height:' + h + 'px;display:block}' +
-          '</style></head><body>' +
-          '<img src="' + svg + '" id="_pi"/>' +
-          '<script>document.getElementById("_pi").addEventListener("load",function(){' +
-          'window.addEventListener("afterprint",function(){window.close();});' +
-          'window.focus();window.print();' +
-          '});</scr' + 'ipt>' +
-          '</body></html>'
-        );
-        win.document.close();
-      });
+      openDemoModal(_DEMO_MSG);  // touchscreen-demo: downloads disabled
     };
     menu.appendChild(pdfBtn);
     var isEnergyPlot = gd.classList && gd.classList.contains('energy-plot-div');
@@ -1139,7 +1121,7 @@ _JS_TEMPLATE = """\
       dataBtn.onclick = function(e) {
         e.stopPropagation();
         menu.remove();
-        _exportPlotData(gd);
+        openDemoModal(_DEMO_MSG);  // touchscreen-demo: downloads disabled
       };
       menu.appendChild(dataBtn);
     }
@@ -2010,6 +1992,8 @@ _JS_TEMPLATE = """\
   }
 
   function _exportCustomPlots() {
+    openDemoModal(_DEMO_MSG);  // touchscreen-demo: export disabled
+    return;
     var out = _customPlots.map(function(cp) {
       var byKey = {};
       cp.series.forEach(function(s) { byKey[_seriesKey(s)] = s; });
@@ -2040,6 +2024,8 @@ _JS_TEMPLATE = """\
   }
 
   function _importCustomPlots(file, grid) {
+    openDemoModal(_DEMO_MSG);  // touchscreen-demo: import disabled (defense in depth)
+    return;
     var reader = new FileReader();
     reader.onload = function(e) {
       try {
@@ -2100,6 +2086,10 @@ _JS_TEMPLATE = """\
     grid.className = 'plots-grid';
     container.appendChild(grid);
     newBtn.onclick = function() { _newCustomPlot(grid); };
+    importLabel.addEventListener('click', function(e) {
+      e.preventDefault();  // touchscreen-demo: block native file picker
+      openDemoModal(_DEMO_MSG);
+    });
     importInput.onchange = function() {
       if (importInput.files[0]) { _importCustomPlots(importInput.files[0], grid); importInput.value = ''; }
     };
@@ -3207,6 +3197,29 @@ _JS_TEMPLATE = """\
     if (e.key === 'Escape' && modalOverlay.classList.contains('open')) closeModal();
   });
 
+  // ── Touchscreen-demo "feature disabled" modal ──────────────────────────
+  var _DEMO_MSG = 'This feature is not available in the touchscreen demo. '
+    + 'Please use the full hws visualizer.';
+  var demoModalOverlay = document.getElementById('demo-modal');
+  var demoModalMsgEl   = document.getElementById('demo-modal-msg');
+
+  function openDemoModal(message) {
+    demoModalMsgEl.textContent = message || _DEMO_MSG;
+    demoModalOverlay.classList.add('open');
+    document.body.style.overflow = 'hidden';
+  }
+  function closeDemoModal() {
+    demoModalOverlay.classList.remove('open');
+    document.body.style.overflow = '';
+  }
+  demoModalOverlay.addEventListener('click', function(e) {
+    if (e.target === demoModalOverlay) closeDemoModal();
+  });
+  document.getElementById('demo-modal-close').addEventListener('click', closeDemoModal);
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape' && demoModalOverlay.classList.contains('open')) closeDemoModal();
+  });
+
   if (VIEWS.length > 1) {
     document.querySelectorAll('.view-tab').forEach(function(btn, i) {
       btn.addEventListener('click', function() { applyView(i); });
@@ -3965,6 +3978,15 @@ def build_html(
         '<div class="modal-body"><div id="modal-plot"></div></div>\n'
         '</div>\n'
         '</div>\n'
+        '<div id="demo-modal" class="modal-overlay" role="dialog" aria-modal="true">\n'
+        '<div class="modal-content demo-modal-content">\n'
+        '<div class="modal-header">\n'
+        '<span id="demo-modal-title">Not available in this demo</span>\n'
+        '<button id="demo-modal-close" title="Close (Esc)">✕</button>\n'
+        '</div>\n'
+        '<div class="modal-body demo-modal-body"><p id="demo-modal-msg"></p></div>\n'
+        '</div>\n'
+        '</div>\n'
         f'{plotly_script}\n'
         f"<script>\n{app_js}\n</script>\n"
         "</body>\n"
@@ -3974,7 +3996,23 @@ def build_html(
 
 # ── Entry point ────────────────────────────────────────────────────────
 
+_ANSI_YELLOW = "\033[33;1m"
+_ANSI_RESET = "\033[0m"
+
+
+def _print_touchscreen_demo_warning() -> None:
+    """Touchscreen-demo branch only: make it obvious this is not the real hws visualizer."""
+    banner = (
+        "TOUCHSCREEN DEMO BUILD — this is a stripped-down build of hws visualizer "
+        "for on-site touchscreen demos.\n"
+        "File import/export, plot downloads, and PDF export are disabled. "
+        "Use the regular hws visualizer for actual analysis."
+    )
+    print(f"{_ANSI_YELLOW}{banner}{_ANSI_RESET}", file=sys.stderr)
+
+
 def main() -> None:
+    _print_touchscreen_demo_warning()
     args = parse_args()
     inputs = args.inputs
     for path in inputs:
