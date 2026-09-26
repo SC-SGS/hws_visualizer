@@ -2763,7 +2763,7 @@ _JS_TEMPLATE = """\
   // least-recently-seen offscreen plots are purged (and re-rendered on demand
   // if revisited). Currently-visible plots are never evicted. Zoom/pan state is
   // preserved across eviction.
-  var MAX_RENDERED = 60;            // cap on live Plotly instances
+  var MAX_RENDERED = 15;            // cap on live Plotly instances
   var RENDER_MARGIN = '300px 0px';  // pre-render just outside the viewport
   var _rendered = new Set();        // plot ids with a live instance
   var _visibleIds = new Set();      // plot ids currently intersecting (never evicted)
